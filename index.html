@@ -298,7 +298,8 @@ footer { text-align: center; padding: 2rem 1.5rem; color: var(--muted); font-siz
     <div class="row row-total"><span class="row-label">Стоимость Б</span><span class="row-value neg" id="buyBOut">—</span></div>
     <hr class="divider">
     <div class="row row-total"><span class="row-label">Нужна ипотека</span><span class="row-value neg" id="mortNeeded">—</span></div>
-    <div class="row"><span class="row-label">Первый взнос</span><span class="row-value" id="downPct">—</span></div>
+    <div class="row" id="surplusRow" style="display:none;"><span class="row-label">Останется на руках</span><span class="row-value pos" id="surplus">—</span></div>
+    <div class="row"><span class="row-label" id="downPctLabel">Первый взнос</span><span class="row-value" id="downPct">—</span></div>
     <hr class="divider">
     <div class="row">
       <span class="row-label">Ставка ипотеки</span>
@@ -559,9 +560,6 @@ function buildTable(tbodyId, principal, ratePct, totalYears, showYears, forceTyp
       }
       const pctPaid = (principal - balance) / principal * 100;
       const hl = yr % 5 === 0 ? ' class="yr-highlight"' : '';
-      // Для дифф показываем диапазон платежей в году
-      const firstM = prinPart + (balance + prinPart * 12) * r; // начало года
-      const lastM  = prinPart + (balance + prinPart) * r;      // конец года
       tbody.innerHTML += '<tr' + hl + '><td>' + yr + '</td><td>' + fmt(yearPayment) + '</td><td style="color:var(--green)">' + fmt(prin) + '</td><td style="color:var(--red)">' + fmt(interest) + '</td><td>' + fmt(balance) + '</td><td style="color:var(--muted)">' + pct(pctPaid) + '</td></tr>';
     }
   }
@@ -595,11 +593,15 @@ function calc() {
   const netSale   = saleA - mortA;
   const totalAvail = netSale - comm + matcap + savings + totalLoansAmt;
   const mortNeeded = Math.max(0, buyB - totalAvail);
-  const downPctVal = buyB > 0 ? (buyB - mortNeeded) / buyB * 100 : 0;
+  const surplus    = Math.max(0, totalAvail - buyB);
+  // Первый взнос считаем только из собственных средств: займы — тоже долг
+  const ownDown    = Math.max(0, buyB - mortNeeded - totalLoansAmt);
+  const downPctVal = buyB > 0 ? ownDown / buyB * 100 : 0;
 
   document.getElementById('saleAout').textContent    = fmt(saleA);
   document.getElementById('mortAout').textContent    = '−\u00A0' + fmt(mortA);
-  document.getElementById('netSale').textContent     = fmt(netSale);
+  document.getElementById('netSale').innerHTML       = fmt(netSale) +
+    (netSale < 0 ? '<span class="badge badge-warn">долг больше цены</span>' : '');
   document.getElementById('commOut').textContent     = '−\u00A0' + fmt(comm);
   document.getElementById('matcapOut').textContent   = '+\u00A0' + fmt(matcap);
   document.getElementById('savingsOut').textContent  = '+\u00A0' + fmt(savings);
@@ -619,6 +621,10 @@ function calc() {
   document.getElementById('totalAvail').textContent = fmt(totalAvail);
   document.getElementById('buyBOut').textContent    = fmt(buyB);
   document.getElementById('mortNeeded').textContent = fmt(mortNeeded);
+  document.getElementById('surplusRow').style.display = surplus > 0 ? '' : 'none';
+  document.getElementById('surplus').textContent = '+ ' + fmt(surplus);
+  document.getElementById('downPctLabel').textContent =
+    totalLoansAmt > 0 ? 'Первый взнос (без займов)' : 'Первый взнос';
 
   const dp = document.getElementById('downPct');
   dp.innerHTML = pct(downPctVal) +
@@ -677,7 +683,8 @@ function calc() {
           '<tbody id="lamort_' + l.id + '"></tbody>' +
         '</table></div>';
       amortCont.appendChild(sec);
-      buildTable('lamort_' + l.id, l.amount, l.rate, l.years, 9999);
+      // Займы всегда аннуитетные — график не должен зависеть от переключателя ипотеки
+      buildTable('lamort_' + l.id, l.amount, l.rate, l.years, 9999, 'ann');
     }
   });
 
